@@ -61,6 +61,16 @@ If you hit a FUSE error (Ubuntu 22.04+ / Fedora 37+ / Arch): install `libfuse2` 
 
 The full engineering process is in the repo: functional specifications (`docs/specification/`), UI wireframes (`docs/wireframes/`), architecture diagrams (`docs/architecture/`), the requirements document (`cahier_des_charges.pdf`), and the final report (`rapport.pdf`). Most documents are in French.
 
+## My role (Daniil Maklakov)
+
+I worked mainly on the **backend game engine** (`drawparty-backend`):
+
+- Room/lobby management and the game lifecycle: phase transitions, turn rotation, timers, and score calculation for both the **Gartic Phone** and **Skribbl** modes.
+- Real-time event handling over socket.io — the hard part was keeping game state **consistent across concurrently connected players**: handling mid-game disconnections and reconnections, and making sure phase changes stay synchronized for everyone in the room.
+- On the frontend, I contributed to some of the drawing-canvas components (Fabric.js) and wrote unit tests for several game functions.
+
+This is the project that taught me the most — real-time systems, event-driven architecture, and working in a 9-person team with specs, wireframes, and CI.
+
 ## Team
 
 Adam Nouira · Rami Hasan Mohamad Jasem · Yann Koehler · Xavier Lauber · **Daniil Maklakov** · Avend Malki · Eros Mallet-Covic · Fadel Mende · Serge Mukoka
