@@ -1,0 +1,508 @@
+// DrawParty — Prisma Schema
+// Database: PostgreSQL (Neon)
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================
+// USER
+// Synced from Clerk via webhook on user.created / user.updated
+// clerkId is the source of truth for identity
+// ============================================================
+model User {
+  id        String   @id @default(cuid())
+  clerkId   String   @unique
+  username  String   @unique
+  email     String   @unique
+  avatarUrl String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  sentFriendRequests     Friendship[]      @relation("FriendshipSender")
+  receivedFriendRequests Friendship[]      @relation("FriendshipReceiver")
+  hostedRooms            Room[]            @relation("RoomHost")
+  roomPlayers            RoomPlayer[]
+  skribblStats           SkribblStats?
+  garticStats            GarticStats?
+  garticChainSteps       GarticChainStep[]
+  ownedGarticChains      GarticChain[]     @relation("GarticChainOwner")
+  garticAITurns          GarticAITurn[]    @relation("GarticAITurnPlayer")
+  skribblRoundsAsDrawer  SkribblRound[]    @relation("SkribblRoundDrawer")
+  skribblGuesses         SkribblGuess[]
+
+  @@index([clerkId])
+  @@map("users")
+}
+
+// ============================================================
+// FRIENDSHIP
+// Tracks friend requests and accepted friendships
+// ============================================================
+model Friendship {
+  id         String   @id @default(cuid())
+  senderId   String
+  receiverId String
+
+  statusId   String           @default("PENDING")
+  status     FriendshipStatus @relation(fields: [statusId], references: [id])
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  sender   User @relation("FriendshipSender",   fields: [senderId],   references: [id], onDelete: Cascade)
+  receiver User @relation("FriendshipReceiver",  fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, receiverId])
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([statusId])
+  @@map("friendships")
+}
+
+model FriendshipStatus {
+  id          String       @id  // "PENDING", "ACCEPTED", "DECLINED", "BLOCKED"
+  slug        String       @unique
+  label       String?          // "En attente", "Accepté", "Refusé", "Bloqué"
+  friendships Friendship[]
+
+  @@map("friendship_statuses")
+}
+
+// ============================================================
+// ROOM
+// Shared for both game modes.
+// Game-mode-specific settings live in RoomSkribblConfig / RoomGarticAIConfig.
+// ============================================================
+model Room {
+  id           String     @id @default(cuid())
+  code         String     @unique
+  gameModeId   String
+  gameMode     GameMode   @relation(fields: [gameModeId], references: [id])
+
+  statusId     String     @default("WAITING")
+  status       RoomStatus @relation(fields: [statusId], references: [id])
+
+  hostId         String
+  host           User       @relation("RoomHost", fields: [hostId], references: [clerkId])
+  maxPlayers     Int        @default(8)
+  roundCount     Int        @default(3)
+  timePerRound   Int        @default(60)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  startedAt      DateTime?
+  endedAt        DateTime?
+
+  players        RoomPlayer[]
+  garticGame     GarticGame?
+  skribblGame    SkribblGame?
+  garticAIGame   GarticAIGame?
+  skribblConfig  RoomSkribblConfig?
+  garticAIConfig RoomGarticAIConfig?
+
+  @@index([code])
+  @@index([statusId])
+  @@map("rooms")
+}
+
+// ============================================================
+// ROOM SKRIBBL CONFIG
+// One row per room; only meaningful for SKRIBBL game mode.
+// ============================================================
+model RoomSkribblConfig {
+  id             String   @id @default(cuid())
+  roomId         String   @unique
+  wordCategories String[]
+  customWords    String[]
+  withAI         Boolean  @default(false)
+  wordLanguage   String   @default("en")
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@map("room_skribbl_configs")
+}
+
+// ============================================================
+// ROOM GARTIC AI CONFIG
+// One row per room; only meaningful for GARTIC_PHONE + AI judge mode.
+// ============================================================
+model RoomGarticAIConfig {
+  id                String     @id @default(cuid())
+  roomId            String     @unique
+  aiJudgeMode       Boolean    @default(false)
+  aiDrawTime        Int        @default(20)
+  aiDrawTimePerTurn Int        @default(20)
+  aiDrawModeId      String     @default("turn")
+  drawMode          AIDrawMode @relation(fields: [aiDrawModeId], references: [id])
+  aiLives           Int        @default(3)
+  aiWordCategory    String     @default("")
+  aiHintLetters     Int        @default(0)
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@map("room_gartic_ai_configs")
+}
+
+model AIDrawMode {
+  id      String               @id  // "turn", "shared"
+  label   String
+
+  configs RoomGarticAIConfig[]
+
+  @@map("ai_draw_modes")
+}
+
+model GameMode {
+  id    String @id  // "GARTIC_PHONE", "SKRIBBL"
+  slug  String @unique
+  label String       // "Gartic Phone", "Skribbl"
+
+  rooms Room[]
+
+  @@map("game_modes")
+}
+
+model RoomStatus {
+  id    String @id  // "WAITING", "PLAYING", "FINISHED"
+  label String       // "En attente", "En cours", "Terminé"
+
+  rooms Room[]
+
+  @@map("room_statuses")
+}
+
+// ============================================================
+// ROOM PLAYER
+// Junction table: User ↔ Room with per-room metadata
+// ============================================================
+model RoomPlayer {
+  id       String           @id @default(cuid())
+  roomId   String
+  userId   String
+  isBot    Boolean          @default(false)
+  isHost   Boolean          @default(false)
+
+
+  statusId String           @default("CONNECTED")
+  status   RoomPlayerStatus @relation(fields: [statusId], references: [id])
+
+  score    Int              @default(0)
+  joinedAt DateTime         @default(now())
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId],  references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+  @@index([roomId])
+  @@index([userId])
+  @@map("room_players")
+}
+
+model RoomPlayerStatus {
+  id    String       @id  // "CONNECTED", "DISCONNECTED", "KICKED"
+  label String            // "Connecté", "Déconnecté", "Exclu"
+
+  roomPlayers RoomPlayer[]
+
+  @@map("room_player_statuses")
+}
+
+// ============================================================
+// GARTIC PHONE — GAME
+// ============================================================
+model GarticGame {
+  id          String          @id @default(cuid())
+  roomId      String          @unique
+  currentStep Int             @default(0)
+  totalSteps  Int
+
+  phaseId     String          @default("PROMPT")
+  phase       GarticGamePhase @relation(fields: [phaseId], references: [id])
+
+  createdAt   DateTime        @default(now())
+  endedAt     DateTime?
+
+  room     Room            @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  chains   GarticChain[]
+
+  @@index([roomId])
+  @@map("gartic_games")
+}
+
+model GarticGamePhase {
+  id    String       @id  // "PROMPT", "DRAW", "DESCRIBE", "REWIND", "FINISHED"
+  label String            // "Écriture", "Dessin", "Description", "Rétrospective", "Terminé"
+
+  games GarticGame[]
+
+  @@map("gartic_game_phases")
+}
+
+// ============================================================
+// GARTIC CHAIN
+// ============================================================
+model GarticChain {
+  id           String @id @default(cuid())
+  garticGameId String
+  ownerId      String
+  orderIndex   Int
+
+  garticGame GarticGame        @relation(fields: [garticGameId], references: [id], onDelete: Cascade)
+  owner      User              @relation("GarticChainOwner", fields: [ownerId], references: [clerkId])
+  steps      GarticChainStep[]
+
+  @@index([garticGameId])
+  @@index([ownerId])
+  @@map("gartic_chains")
+}
+
+// ============================================================
+// GARTIC CHAIN STEP
+// ============================================================
+model GarticChainStep {
+  id          String         @id @default(cuid())
+  chainId     String
+  authorId    String
+  stepIndex   Int
+  typeId      String
+  type        GarticStepType @relation(fields: [typeId], references: [id])
+  content     String?          // Text for PROMPT / DESCRIBE
+  drawingUrl  String?          // URL for DRAW (stored in object storage)
+  strokeData  String?          // JSON-serialized FabricStroke[] for DRAW steps (stroke-by-stroke replay)
+  ratingId    String?          // FK → ChainStepRating; null for step 0 (prompt)
+  submittedAt DateTime         @default(now())
+
+  chain        GarticChain      @relation(fields: [chainId],  references: [id], onDelete: Cascade)
+  author       User             @relation(fields: [authorId], references: [clerkId])
+  ratingLookup ChainStepRating? @relation(fields: [ratingId], references: [id])
+
+  @@unique([chainId, stepIndex])
+  @@index([chainId])
+  @@index([authorId])
+  @@map("gartic_chain_steps")
+}
+
+model GarticStepType {
+  id    String            @id  // "PROMPT", "DRAW", "DESCRIBE"
+  label String
+
+  steps GarticChainStep[]
+
+  @@map("gartic_step_types")
+}
+
+model ChainStepRating {
+  id    String            @id  // "GREEN", "YELLOW", "RED"
+  label String
+
+  steps GarticChainStep[]
+
+  @@map("chain_step_ratings")
+}
+
+// ============================================================
+// SKRIBBL — GAME
+// ============================================================
+model SkribblGame {
+  id                 String           @id @default(cuid())
+  roomId             String           @unique
+  currentRound       Int              @default(1)
+
+  phaseId            String           @default("WAITING")
+  phase              SkribblGamePhase @relation(fields: [phaseId], references: [id])
+
+  playerOrder        String[]   // clerkIds in shuffled drawing order
+  currentDrawerIndex Int        @default(0)
+  offeredWordIds     String[]   // word IDs currently offered to drawer (for validation)
+  usedWordIds        String[]   @default([])   // word IDs already used this game; prevents repetition
+  createdAt          DateTime   @default(now())
+  endedAt            DateTime?
+
+  room   Room           @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  rounds SkribblRound[]
+
+  @@index([roomId])
+  @@map("skribbl_games")
+}
+
+model SkribblGamePhase {
+  id    String        @id  // "WAITING", "PICKING_WORD", "DRAWING", "ROUND_END", "FINISHED"
+  label String             // "En attente", "Choix du mot", "Dessin en cours", "Tour terminé", "Fini"
+
+  games SkribblGame[]
+
+  @@map("skribbl_game_phases")
+}
+
+// ============================================================
+// SKRIBBL ROUND
+// ============================================================
+model SkribblRound {
+  id            String    @id @default(cuid())
+  skribblGameId String
+  roundNumber   Int
+  drawerId      String
+  word          String
+  hint          String?
+  drawingUrl    String?
+  startedAt     DateTime  @default(now())
+  endedAt       DateTime?
+
+  skribblGame SkribblGame    @relation(fields: [skribblGameId], references: [id], onDelete: Cascade)
+  drawer      User           @relation("SkribblRoundDrawer", fields: [drawerId], references: [clerkId])
+  guesses     SkribblGuess[]
+
+  @@index([skribblGameId])
+  @@index([drawerId])
+  @@map("skribbl_rounds")
+}
+
+// ============================================================
+// SKRIBBL GUESS
+// ============================================================
+model SkribblGuess {
+  id           String   @id @default(cuid())
+  roundId      String
+  playerId     String
+  content      String
+  isCorrect    Boolean  @default(false)
+  pointsEarned Int      @default(0)
+  guessedAt    DateTime @default(now())
+
+  round  SkribblRound @relation(fields: [roundId],  references: [id], onDelete: Cascade)
+  player User         @relation(fields: [playerId], references: [clerkId])
+
+  @@index([roundId])
+  @@index([playerId])
+  @@map("skribbl_guesses")
+}
+
+// ============================================================
+// SKRIBBL STATS
+// ============================================================
+model SkribblStats {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  gamesPlayed  Int      @default(0)
+  totalScore   Int      @default(0)
+  totalCorrect Int      @default(0)
+  totalDrawn   Int      @default(0)
+  bestScore    Int      @default(0)
+  wins         Int      @default(0)
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("skribbl_stats")
+}
+
+// ============================================================
+// GARTIC STATS
+// ============================================================
+model GarticStats {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  gamesPlayed  Int      @default(0)
+  chainsShared Int      @default(0)
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("gartic_stats")
+}
+
+// ============================================================
+// WORD BANK
+// ============================================================
+model Word {
+  id           String         @id @default(cuid())
+  text         String
+  language     String         @default("en")
+  category     String
+  difficultyId String         @default("MEDIUM")
+  difficulty   WordDifficulty @relation(fields: [difficultyId], references: [id])
+
+  @@unique([text, language])
+  @@index([category])
+  @@index([language])
+  @@index([difficultyId])
+  @@map("words")
+}
+
+model WordDifficulty {
+  id    String @id  // "EASY", "MEDIUM", "HARD"
+  label String      // "Facile", "Moyen", "Difficile"
+
+  words Word[]
+
+  @@map("word_difficulties")
+}
+
+// ============================================================
+// GARTIC AI — Collaborative drawing vs AI judge
+// Players relay-draw on a shared canvas; Groq Vision judges.
+// ============================================================
+
+model GarticAIGame {
+  id        String            @id @default(cuid())
+  roomId    String            @unique
+  lives     Int               @default(3)
+  score     Int               @default(0)
+  phaseId   String            @default("DRAWING")
+  phase     GarticAIGamePhase @relation(fields: [phaseId], references: [id])
+  createdAt DateTime          @default(now())
+  endedAt   DateTime?
+
+  room   Room            @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  rounds GarticAIRound[]
+
+  @@index([roomId])
+  @@map("gartic_ai_games")
+}
+
+model GarticAIGamePhase {
+  id    String         @id  // "DRAWING", "AI_JUDGING", "ROUND_RESULT", "GAME_OVER"
+  label String
+
+  games GarticAIGame[]
+
+  @@map("gartic_ai_game_phases")
+}
+
+model GarticAIRound {
+  id         String    @id @default(cuid())
+  gameId     String
+  roundIndex Int
+  word       String
+  success    Boolean?
+  aiGuess    String?
+
+  game  GarticAIGame  @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  turns GarticAITurn[]
+
+  @@index([gameId])
+  @@map("gartic_ai_rounds")
+}
+
+model GarticAITurn {
+  id         String @id @default(cuid())
+  roundId    String
+  playerId   String // clerkId
+  turnIndex  Int
+  strokeData String? // JSON FabricStroke[]
+
+  round  GarticAIRound @relation(fields: [roundId],   references: [id],      onDelete: Cascade)
+  player User          @relation("GarticAITurnPlayer", fields: [playerId], references: [clerkId])
+
+  @@index([roundId])
+  @@index([playerId])
+  @@map("gartic_ai_turns")
+}

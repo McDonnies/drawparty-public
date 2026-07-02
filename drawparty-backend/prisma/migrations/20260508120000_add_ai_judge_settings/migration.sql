@@ -1,0 +1,7 @@
+-- AlterTable: rooms — add AI Judge mode sub-settings
+ALTER TABLE "rooms"
+  ADD COLUMN IF NOT EXISTS "aiDrawTime"        INTEGER NOT NULL DEFAULT 20,
+  ADD COLUMN IF NOT EXISTS "aiDrawTimePerTurn" INTEGER NOT NULL DEFAULT 20,
+  ADD COLUMN IF NOT EXISTS "aiDrawMode"        TEXT    NOT NULL DEFAULT 'turn',
+  ADD COLUMN IF NOT EXISTS "aiLives"           INTEGER NOT NULL DEFAULT 3,
+  ADD COLUMN IF NOT EXISTS "aiWordCategory"    TEXT    NOT NULL DEFAULT '';

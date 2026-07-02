@@ -1,0 +1,85 @@
+# DrawParty — GitLab CI/CD pipeline
+# Runs unit tests for backend and frontend independently.
+# Each job only triggers when files in its own package change,
+# so a pure frontend commit does not waste time running backend tests.
+#
+# Coverage reports are uploaded as Cobertura XML artifacts so GitLab
+# can render per-line coverage percentages in Merge Request diffs.
+
+stages:
+  - test
+  - deploy
+
+# ── Backend tests ─────────────────────────────────────────────────────────────
+
+backend:test:
+  stage: test
+  image: node:20-alpine
+  cache:
+    key:
+      files:
+        - drawparty-backend/package-lock.json
+    paths:
+      - drawparty-backend/node_modules/
+  before_script:
+    - cd drawparty-backend
+    - npm ci
+  script:
+    - npm run test -- --reporter=verbose
+  coverage: '/^All files\s*\|\s*([\d.]+)/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: drawparty-backend/coverage/cobertura-coverage.xml
+    paths:
+      - drawparty-backend/coverage/
+    expire_in: 7 days
+  rules:
+    - changes:
+        - drawparty-backend/src/**/*
+        - drawparty-backend/package.json
+        - drawparty-backend/vitest.config.ts
+
+# ── Frontend tests ────────────────────────────────────────────────────────────
+
+frontend:test:
+  stage: test
+  image: node:20-alpine
+  cache:
+    key:
+      files:
+        - drawparty/package-lock.json
+    paths:
+      - drawparty/node_modules/
+  before_script:
+    - cd drawparty
+    - npm ci
+  script:
+    - npm run test -- --reporter=verbose
+  coverage: '/^All files\s*\|\s*([\d.]+)/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: drawparty/coverage/cobertura-coverage.xml
+    paths:
+      - drawparty/coverage/
+    expire_in: 7 days
+  rules:
+    - changes:
+        - drawparty/components/**/*
+        - drawparty/__tests__/**/*
+        - drawparty/package.json
+        - drawparty/vitest.config.ts
+
+# ── Deploy ────────────────────────────────────────────────────────────────────
+
+backend:deploy:
+  stage: deploy
+  tags:
+    - server-runner
+  only:
+    - main
+  script:
+    - bash /home/ubuntu/deploy.sh

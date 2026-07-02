@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "rooms" ADD COLUMN "aiHintLetters" INTEGER NOT NULL DEFAULT 0;
