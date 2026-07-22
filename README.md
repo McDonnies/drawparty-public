@@ -59,7 +59,7 @@ If you hit a FUSE error (Ubuntu 22.04+ / Fedora 37+ / Arch): install `libfuse2` 
 
 ## Project documentation (`docs/`)
 
-The full engineering process is in the repo: functional specifications (`docs/specification/`), UI wireframes (`docs/wireframes/`), architecture diagrams (`docs/architecture/`), the requirements document (`cahier_des_charges.pdf`), and the final report (`rapport.pdf`). Most documents are in French.
+The engineering process is in the repo: functional specifications (`docs/specification/`), UI wireframes (`docs/wireframes/`), and architecture diagrams (`docs/architecture/`). Most documents are in French.
 
 ## My role (Daniil Maklakov)
 
