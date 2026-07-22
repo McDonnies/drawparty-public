@@ -70,7 +70,3 @@ I worked mainly on the **backend game engine** (`drawparty-backend`):
 - On the frontend, I contributed to some of the drawing-canvas components (Fabric.js) and wrote unit tests for several game functions.
 
 This is the project that taught me the most — real-time systems, event-driven architecture, and working in a 9-person team with specs, wireframes, and CI.
-
-## Team
-
-Adam Nouira · Rami Hasan Mohamad Jasem · Yann Koehler · Xavier Lauber · **Daniil Maklakov** · Avend Malki · Eros Mallet-Covic · Fadel Mende · Serge Mukoka
